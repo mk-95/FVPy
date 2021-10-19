@@ -15,7 +15,7 @@ class Operators:
         return self.__domain_description
 
 class SpatialOpt(Operators):
-    def Interp(self,direction:str)->FieldBase:
+    def Interp(self,direction:str):
         if direction=="e":
             class InterpEast:
                 def __init__(self):
@@ -190,3 +190,164 @@ class SpatialOpt(Operators):
 
         else:
             return NotImplementedError
+
+
+class BCOpt(Operators):
+    # todo: generalize as a function of the ghost cells
+    # the shape of the dict has to be as follows:
+    # dict = {"dirichlet":{"x+":{phi:2,press:3},
+    #                      "x-":{phi:2,press:-1},
+    #                      "y+":{},
+    #                      "y-":{}
+    #                      }
+    #         }
+
+    def __parse_Bcs(self,bc_dict:dict):
+        self.__bcs = bc_dict
+
+    def apply_bcs(self,bc_dict:dict):
+        self.__parse_Bcs(bc_dict)
+        # deal with periodicity
+
+        bcs_types = self.__bcs.keys()
+        if "dirichlet" in bcs_types:
+            self.__apply_dirichlet()
+        if "neuman" in bcs_types:
+            self.__apply_neuman()
+
+    def __apply_dirichlet(self):
+        dirichlet_data = self.__bcs["dirichlet"]
+        for direction in dirichlet_data.keys():
+            if direction == "x+":
+                dirichlet_xp_data = dirichlet_data["x+"]
+                for tuple in dirichlet_xp_data:
+                    field, bcvalue = tuple
+                    field_type_name = field.__class__.__name__
+                    if field_type_name == 'FieldsContainer':
+                        field_type_name = field.type
+                    if field_type_name == SVolField.__name__:
+                        field.xgp = 2*bcvalue - field.Ixgp
+                    elif field_type_name == XVolField.__name__:
+                        field.xgp = bcvalue
+                    elif field_type_name == YVolField.__name__:
+                        field.xgp = 2*bcvalue - field.Ixgp
+                    else:
+                        return NotImplementedError
+            elif direction == "x-":
+                dirichlet_xn_data = dirichlet_data["x-"]
+                for tuple in dirichlet_xn_data:
+                    field, bcvalue = tuple
+                    field_type_name = field.__class__.__name__
+                    if field_type_name == 'FieldsContainer':
+                        field_type_name = field.type
+                    if field_type_name == SVolField.__name__:
+                        field.xgn = 2*bcvalue - field.Ixgn
+                    elif field_type_name == XVolField.__name__:
+                        field.xgn = bcvalue # need to fix this by accessing the boundary value  directly.
+                    elif field_type_name == YVolField.__name__:
+                        field.xgn = 2*bcvalue - field.Ixgn
+                    else:
+                        return NotImplementedError
+
+            elif direction == "y+":
+                dirichlet_yp_data = dirichlet_data["y+"]
+                for tuple in dirichlet_yp_data:
+                    field, bcvalue = tuple
+                    field_type_name = field.__class__.__name__
+                    if field_type_name == 'FieldsContainer':
+                        field_type_name = field.type
+                    if field_type_name == SVolField.__name__:
+                        field.ygp = 2*bcvalue - field.Iygp
+                    elif field_type_name == XVolField.__name__:
+                        field.ygp = 2*bcvalue - field.Iygp
+                    elif field_type_name == YVolField.__name__:
+                        field.xgn = bcvalue
+                    else:
+                        return NotImplementedError
+
+            elif direction == "y-":
+                dirichlet_yn_data = dirichlet_data["y-"]
+                for tuple in dirichlet_yn_data:
+                    field, bcvalue = tuple
+                    field_type_name = field.__class__.__name__
+                    if field_type_name == 'FieldsContainer':
+                        field_type_name = field.type
+                    if field_type_name == SVolField.__name__:
+                        field.ygn = 2*bcvalue - field.Iygn
+                    elif field_type_name == XVolField.__name__:
+                        field.ygn = 2*bcvalue - field.Iygn
+                    elif field_type_name == YVolField.__name__:
+                        field.xgn = bcvalue # need to fix this by accessing the boundary value  directly.
+                    else:
+                        return NotImplementedError
+
+    def __apply_neuman(self):
+        # I am using one sided gradient to the east
+        neuman_data = self.__bcs["neuman"]
+        for direction in neuman_data.keys():
+            if direction == "x+":
+                dx = self.domain_description.dx
+                neuman_xp_data = neuman_data["x+"]
+                for tuple in neuman_xp_data:
+                    field, bcvalue = tuple
+                    field_type_name = field.__class__.__name__
+                    if field_type_name == 'FieldsContainer':
+                        field_type_name = field.type
+                    if field_type_name == SVolField.__name__:
+                        field.xgp = dx * bcvalue + field.Ixgp
+                    elif field_type_name == XVolField.__name__:
+                        field.xgp = dx * bcvalue + field.Ixgp
+                    elif field_type_name == YVolField.__name__:
+                        field.xgp = dx * bcvalue + field.Ixgp
+                    else:
+                        return NotImplementedError
+            elif direction == "x-":
+                dx = self.domain_description.dx
+                neuman_xn_data = neuman_data["x-"]
+                for tuple in neuman_xn_data:
+                    field, bcvalue = tuple
+                    field_type_name = field.__class__.__name__
+                    if field_type_name == 'FieldsContainer':
+                        field_type_name = field.type
+                    if field_type_name == SVolField.__name__:
+                        field.xgn = field.Ixgn -  dx * bcvalue
+                    elif field_type_name == XVolField.__name__:
+                        field.xgn = field.Ixgn -  dx * bcvalue
+                    elif field_type_name == YVolField.__name__:
+                        field.xgn = field.Ixgn -  dx * bcvalue
+                    else:
+                        return NotImplementedError
+
+            elif direction == "y+":
+                dy = self.domain_description.dy
+                neuman_yp_data = neuman_data["y+"]
+                for tuple in neuman_yp_data:
+                    field, bcvalue = tuple
+                    field_type_name = field.__class__.__name__
+                    if field_type_name == 'FieldsContainer':
+                        field_type_name = field.type
+                    if field_type_name == SVolField.__name__:
+                        field.ygp = dy * bcvalue + field.Iygp
+                    elif field_type_name == XVolField.__name__:
+                        field.ygp = dy * bcvalue + field.Iygp
+                    elif field_type_name == YVolField.__name__:
+                        field.xgn = dy * bcvalue + field.Iygp
+                    else:
+                        return NotImplementedError
+
+            elif direction == "y-":
+                dy = self.domain_description.dy
+                neuman_yn_data = neuman_data["y-"]
+                for tuple in neuman_yn_data:
+                    field, bcvalue = tuple
+                    field_type_name = field.__class__.__name__
+                    if field_type_name == 'FieldsContainer':
+                        field_type_name = field.type
+                    if field_type_name == SVolField.__name__:
+                        field.ygn = field.Iygn - dy * bcvalue
+                    elif field_type_name == XVolField.__name__:
+                        field.ygn = field.Iygn - dy * bcvalue
+                    elif field_type_name == YVolField.__name__:
+                        field.xgn = field.Iygn - dy * bcvalue
+                    else:
+                        return NotImplementedError
